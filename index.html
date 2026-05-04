@@ -307,22 +307,35 @@ function drawSubLabel(ctx, text, cx, y, size, color) {
   const ns = size, ss = size * 0.72;
   const parts = [];
   let cur = '', mode = 'n';
+  // Parse: ^x or ^{xxx} for superscript, _x or _{xxx} for subscript
+  // A run ends only at the next ^, _, space, or end of string
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (ch === '^' || ch === '_') {
       if (cur) parts.push({t:cur, m:mode});
       cur = ''; mode = ch==='^'?'sup':'sub';
-    } else if (mode !== 'n' && cur.length > 0) {
-      const isEndChar = /[\s,()~\/]/.test(ch) || (isNaN(ch) && !isNaN(cur[cur.length-1]));
-      if (isEndChar) { parts.push({t:cur, m:mode}); cur=ch; mode='n'; }
-      else cur += ch;
-    } else { cur += ch; }
+      // Support bracketed syntax ^{...} or _{...}
+      if (text[i+1] === '{') {
+        const close = text.indexOf('}', i+2);
+        if (close !== -1) {
+          parts.push({t: text.slice(i+2, close), m: mode});
+          i = close; cur = ''; mode = 'n';
+        }
+      }
+    } else if (ch === ' ' && mode !== 'n') {
+      // space always ends a super/sub run
+      if (cur) parts.push({t:cur, m:mode});
+      cur = ' '; mode = 'n';
+    } else {
+      cur += ch;
+    }
   }
   if (cur) parts.push({t:cur, m:mode});
   ctx.save();
   let tw = 0;
   parts.forEach(p => { ctx.font = `400 ${p.m==='n'?ns:ss}px "IBM Plex Sans",sans-serif`; tw += ctx.measureText(p.t).width; });
-  let px = cx - tw/2;
+  // align: 'left' starts at cx, default centres on cx
+  let px = (arguments[6] === 'left') ? cx : cx - tw/2;
   parts.forEach(p => {
     ctx.font = `400 ${p.m==='n'?ns:ss}px "IBM Plex Sans",sans-serif`;
     ctx.fillStyle = color||'#666';
@@ -466,8 +479,8 @@ function draw() {
       ctx.textAlign='left'; ctx.textBaseline='middle';
       ctx.fillText(t.label, labelX, t.sublabel ? ly-7 : ly);
       if (t.sublabel) {
-        ctx.font = SUB_FONT; ctx.fillStyle='#666'; ctx.textBaseline='middle';
-        ctx.fillText(t.sublabel.replace(/\^(\S+)/g,'$1').replace(/_(\S+)/g,'$1'), labelX, ly+8);
+        // Use drawSubLabel for proper super/subscript rendering
+        drawSubLabel(ctx, t.sublabel, labelX, ly+8, 9, '#666', 'left');
       }
     });
   }
@@ -592,6 +605,7 @@ function draw() {
 
   ctx.fillStyle='#ccc'; ctx.font='8px "IBM Plex Mono",monospace';
   ctx.textAlign='right'; ctx.textBaseline='bottom';
+  ctx.fillText('energy-band-diagram-builder v2', W-4, H-4);
 }
 function downloadPNG() {
   draw();
