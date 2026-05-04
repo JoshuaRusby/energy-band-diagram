@@ -151,8 +151,10 @@
         </div>
       </div>
       <div class="field">
-        <label>axis gap (px) — space between diagram and axis</label>
-        <input type="number" id="axis-gap" value="0" step="5" min="-60" max="200" oninput="draw()">
+        <label>axis distance — <span id="axis-gap-val">0</span> px</label>
+        <input type="range" id="axis-gap" value="0" min="-200" max="200" step="1"
+          style="width:100%;accent-color:#c8f060"
+          oninput="document.getElementById('axis-gap-val').textContent=this.value;fitCanvasToAxis();draw()">
       </div>
     </div>
 
@@ -296,6 +298,14 @@ function renderEm() {
   });
 }
 
+function fitCanvasToAxis() {
+  const baseW = parseInt(document.getElementById('fig-width').value)||660;
+  const gap = parseInt(document.getElementById('axis-gap').value)||0;
+  // axis moves left when gap is positive, so canvas needs to shrink;
+  // axis moves right when gap is negative, so canvas needs to grow
+  document.getElementById('diagram').width = baseW - gap;
+}
+
 function renderAll() { renderTraps(); renderExc(); renderEm(); }
 function escH(s) { return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
@@ -408,7 +418,8 @@ function draw() {
   const BX0 = PAD_L, BX1 = PAD_L + plotW*0.72, BW = BX1-BX0, BH = 20;
   const TX0 = PAD_L + plotW*0.12, TX1 = BX1, TW = TX1-TX0, TH = 11;
   const labelX = TX1 + 12;
-  const axX = W - AX_LABEL_W - 10;
+  const axisGap = parseInt(document.getElementById('axis-gap').value)||0;
+  const axX = W - AX_LABEL_W - 10 - axisGap;
 
   function rrect(x,y,w,h,r) {
     ctx.beginPath();
@@ -609,6 +620,7 @@ function draw() {
 
   ctx.fillStyle='#ccc'; ctx.font='8px "IBM Plex Mono",monospace';
   ctx.textAlign='right'; ctx.textBaseline='bottom';
+  ctx.fillText('energy-band-diagram-builder v2', W-4, H-4);
 }
 function downloadPNG() {
   draw();
