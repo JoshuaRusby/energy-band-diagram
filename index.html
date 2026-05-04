@@ -608,55 +608,198 @@ function downloadPNG() {
 
 function downloadSVG() {
   const canvas = document.getElementById('diagram');
-  const W=canvas.width, H=canvas.height;
-  const bandgap=parseFloat(document.getElementById('bandgap').value)||3.03;
-  const minE=parseFloat(document.getElementById('mine').value)||-0.3;
-  const maxE=bandgap+0.45, eRange=maxE-minE;
-  const PAD_L=76,PAD_R=52,PAD_T=46,PAD_B=52;
-  const plotH=H-PAD_T-PAD_B, plotW=W-PAD_L-PAD_R;
-  const BX0=PAD_L,BX1=PAD_L+plotW*0.52,BW=BX1-BX0,BH=20;
-  const TX0=PAD_L+plotW*0.10,TX1=BX1,TW=TX1-TX0,TH=11;
-  function yOf(e) { return PAD_T+plotH*(1-(e-minE)/eRange); }
+  const W = canvas.width, H = canvas.height;
+  const bandgap = parseFloat(document.getElementById('bandgap').value)||3.03;
+  const minE = parseFloat(document.getElementById('mine').value)||-0.3;
+  const maxE = bandgap + 0.45, eRange = maxE - minE;
+  const annot = document.getElementById('show-annot').value;
+  const showNR = document.getElementById('show-nr').value === 'yes';
+  const showBG = document.getElementById('show-bg').value === 'yes';
+  const showAx = document.getElementById('show-ax').value === 'yes';
+  const material = document.getElementById('material').value;
+  const vbLabel = document.getElementById('vb-label').value;
+  const cbLabel = document.getElementById('cb-label').value;
+
+  // Match draw() layout exactly
+  const AX_LABEL_W = showAx ? 22 : 0;
+  const TICK_W     = showAx ? 44 : 0;
+  let maxLabelW = 0;
+  if (annot !== 'none' && traps.length > 0) {
+    const tmp = document.createElement('canvas').getContext('2d');
+    traps.forEach(t => {
+      tmp.font = '500 10px sans-serif';
+      const nw = tmp.measureText(t.label).width;
+      tmp.font = '400 9px sans-serif';
+      const sw = t.sublabel ? tmp.measureText(t.sublabel.replace(/[\^_]\S+/g,'')).width + 10 : 0;
+      maxLabelW = Math.max(maxLabelW, nw, sw);
+    });
+  }
+  maxLabelW = Math.ceil(maxLabelW) + 16;
+  const PAD_L = 44, PAD_T = 46, PAD_B = 52;
+  const PAD_R = maxLabelW + TICK_W + AX_LABEL_W + 10;
+  const plotH = H - PAD_T - PAD_B, plotW = W - PAD_L - PAD_R;
+
+  function yOf(e) { return PAD_T + plotH*(1-(e-minE)/eRange); }
+  function getLvlE(id) {
+    if (id==='VB') return 0; if (id==='CB') return bandgap;
+    return traps[parseInt(id.replace('trap-',''))].energy;
+  }
+  function edgeY(id, goingUp) {
+    if (id==='VB') return yOf(0);
+    if (id==='CB') return yOf(bandgap);
+    return goingUp ? yOf(getLvlE(id)) - TH/2 : yOf(getLvlE(id)) + TH/2;
+  }
   function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function dashArray(style) { return style==='dashed'?'5,4':style==='dotted'?'2,3':'none'; }
+
+  const BX0=PAD_L, BX1=PAD_L+plotW*0.72, BW=BX1-BX0, BH=20;
+  const TX0=PAD_L+plotW*0.12, TX1=BX1, TW=TX1-TX0, TH=11;
+  const labelX = TX1 + 12;
+  const axX = W - AX_LABEL_W - 10;
+
+  // Per-colour arrow markers
+  const usedColors = new Set(['#1a1a1a']);
+  excitations.forEach(e => usedColors.add(PATH_COLORS[e.colorIdx]));
+  emissions.forEach(e => usedColors.add(PATH_COLORS[e.colorIdx]));
+  const defs = [...usedColors].map(c => {
+    const id = 'arr'+c.replace('#','');
+    return `<marker id="${id}" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="${c}"/></marker>`;
+  }).join('');
+
   let s = '';
-  s += `<rect x="${BX0}" y="${yOf(0)-BH/2}" width="${BW}" height="${BH}" rx="4" fill="#3a3a3a" stroke="#1a1a1a" stroke-width="1"/>`;
-  s += `<text x="${BX0+BW/2}" y="${yOf(0)+4}" text-anchor="middle" font-size="11" font-weight="500" fill="white" font-family="sans-serif">${esc(document.getElementById('vb-label').value)}</text>`;
-  s += `<rect x="${BX0}" y="${yOf(bandgap)-BH/2}" width="${BW}" height="${BH}" rx="4" fill="#3a3a3a" stroke="#1a1a1a" stroke-width="1"/>`;
-  s += `<text x="${BX0+BW/2}" y="${yOf(bandgap)+4}" text-anchor="middle" font-size="11" font-weight="500" fill="white" font-family="sans-serif">${esc(document.getElementById('cb-label').value)}</text>`;
+
+  // VB: top edge at yOf(0), extends downward
+  s += `<rect x="${BX0}" y="${yOf(0)}" width="${BW}" height="${BH}" rx="4" fill="#3a3a3a" stroke="#1a1a1a" stroke-width="1"/>`;
+  s += `<text x="${BX0+BW/2}" y="${yOf(0)+BH/2+4}" text-anchor="middle" font-size="11" font-weight="bold" fill="white" font-family="sans-serif">${esc(vbLabel)}</text>`;
+  // CB: bottom edge at yOf(bandgap), extends upward
+  s += `<rect x="${BX0}" y="${yOf(bandgap)-BH}" width="${BW}" height="${BH}" rx="4" fill="#3a3a3a" stroke="#1a1a1a" stroke-width="1"/>`;
+  s += `<text x="${BX0+BW/2}" y="${yOf(bandgap)-BH/2+4}" text-anchor="middle" font-size="11" font-weight="bold" fill="white" font-family="sans-serif">${esc(cbLabel)}</text>`;
+
+  // Trap levels
   traps.forEach((t,i) => {
-    const ty=yOf(t.energy);
+    const ty = yOf(t.energy);
     s += `<rect x="${TX0}" y="${ty-TH/2}" width="${TW}" height="${TH}" rx="3" fill="${t.color}" stroke="#333" stroke-width="0.7"/>`;
-    s += `<text x="${TX1+12}" y="${ty-4}" font-size="10.5" font-weight="500" fill="#1a1a1a" font-family="sans-serif">${esc(t.label)}</text>`;
-    if (t.sublabel) { const plain=t.sublabel.replace(/[\^_]/g,''); s += `<text x="${TX1+12}" y="${ty+14}" font-size="9" fill="#666" font-family="monospace">${esc(plain)}</text>`; }
   });
+
+  // Trap labels with collision avoidance
+  if (annot !== 'none') {
+    const sortedByE = [...traps].map((t,i)=>({...t,i})).sort((a,b)=>b.energy-a.energy);
+    const usedY = [];
+    const MIN_GAP = 26;
+    sortedByE.forEach(t => {
+      const rawY = yOf(t.energy);
+      let ly = rawY;
+      for (let iter=0; iter<40; iter++) {
+        if (!usedY.some(uy => Math.abs(uy-ly) < MIN_GAP)) break;
+        ly += MIN_GAP;
+      }
+      usedY.push(ly);
+      if (Math.abs(ly-rawY) > 4) {
+        s += `<line x1="${TX1+2}" y1="${rawY}" x2="${labelX-2}" y2="${ly}" stroke="#ccc" stroke-width="0.4" stroke-dasharray="2,4"/>`;
+      }
+      const nameY = t.sublabel ? ly-7 : ly;
+      s += `<text x="${labelX}" y="${nameY+4}" font-size="10.5" font-weight="bold" fill="#1a1a1a" font-family="sans-serif">${esc(t.label)}</text>`;
+      if (t.sublabel) {
+        const plain = t.sublabel.replace(/\^(\S+)/g,'$1').replace(/_(\S+)/g,'$1');
+        s += `<text x="${labelX}" y="${ly+12}" font-size="9" fill="#666" font-family="monospace">${esc(plain)}</text>`;
+      }
+    });
+  }
+
+  // Excitation arrows
   const nExc=excitations.length, nEm=emissions.length;
   const excSp=TW/(nExc+1), emSp=TW/(nEm+1);
-  excitations.forEach((e,i)=>{
-    const x=TX0+excSp*(i+1);
-    const y1=yOf(getLevelEnergy(e.fromLevel)), y2=yOf(getLevelEnergy(e.toLevel));
-    const col=PATH_COLORS[e.colorIdx];
-    const ld=e.style==='dashed'?'5,4':e.style==='dotted'?'2,3':'none';
-    s += `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="1.4" stroke-dasharray="${ld}" marker-end="url(#arr)"/>`;
+  excitations.forEach((e,i) => {
+    const x = TX0+excSp*(i+1);
+    const goingUp = getLvlE(e.toLevel) > getLvlE(e.fromLevel);
+    const y1 = edgeY(e.fromLevel, goingUp), y2 = edgeY(e.toLevel, goingUp);
+    const col = PATH_COLORS[e.colorIdx];
+    const markId = 'arr'+col.replace('#','');
+    const ld = dashArray(e.style);
+    s += `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="1.4" stroke-dasharray="${ld}" marker-end="url(#${markId})"/>`;
+    if (annot === 'all') {
+      const midY = (y1+y2)/2;
+      s += `<text x="${x-5}" y="${midY-4}" text-anchor="end" font-size="8.5" fill="${col}" font-family="monospace" font-style="italic">${esc(e.label)}</text>`;
+      s += `<text x="${x-5}" y="${midY+9}" text-anchor="end" font-size="8.5" fill="${col}" font-family="monospace" font-style="italic">${e.ev.toFixed(2)} eV</text>`;
+    }
   });
-  emissions.forEach((e,i)=>{
-    const x=TX0+emSp*(i+1)+TW*0.1;
-    const y1=yOf(getLevelEnergy(e.fromLevel)), y2=yOf(getLevelEnergy(e.toLevel));
-    const col=PATH_COLORS[e.colorIdx];
-    s += `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="2" marker-end="url(#arr)"/>`;
+
+  // Emission arrows
+  emissions.forEach((e,i) => {
+    const x = TX0+emSp*(i+1)+TW*0.08;
+    const goingUp = getLvlE(e.toLevel) > getLvlE(e.fromLevel);
+    const y1 = edgeY(e.fromLevel, !goingUp), y2 = edgeY(e.toLevel, !goingUp);
+    const col = PATH_COLORS[e.colorIdx];
+    const markId = 'arr'+col.replace('#','');
+    s += `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="2" marker-end="url(#${markId})"/>`;
+    if (annot === 'all') {
+      const midY = (y1+y2)/2;
+      s += `<text x="${x+8}" y="${midY-4}" font-size="9" font-weight="bold" fill="${col}" font-family="sans-serif">${esc(e.label)}</text>`;
+      s += `<text x="${x+8}" y="${midY+9}" font-size="8.5" fill="${col==='#1a1a1a'?'#555':col}" font-family="monospace">~${Math.round(e.nm)} nm (${e.ev.toFixed(3)} eV)</text>`;
+    }
   });
+
+  // Non-radiative relaxation
+  if (showNR && traps.length > 1 && annot !== 'none') {
+    const sorted = [...traps].sort((a,b)=>b.energy-a.energy);
+    const nrX = TX0+TW*0.88;
+    for (let i=0; i<sorted.length-1; i++) {
+      const y1=yOf(sorted[i].energy)+TH/2, y2=yOf(sorted[i+1].energy)-TH/2;
+      s += `<line x1="${nrX}" y1="${y1}" x2="${nrX}" y2="${y2}" stroke="#999" stroke-width="1" stroke-dasharray="2,3" marker-end="url(#arr1a1a1a)"/>`;
+    }
+    if (annot === 'all') {
+      const nrMid = (yOf(sorted[0].energy)+yOf(sorted[sorted.length-1].energy))/2;
+      s += `<text x="${nrX-4}" y="${nrMid-2}" text-anchor="end" font-size="8" fill="#999" font-family="monospace" font-style="italic">non-radiative</text>`;
+      s += `<text x="${nrX-4}" y="${nrMid+10}" text-anchor="end" font-size="8" fill="#999" font-family="monospace" font-style="italic">relaxation</text>`;
+    }
+  }
+
+  // Bandgap bracket
+  if (showBG && annot !== 'none') {
+    const bgX=BX1+18, bgTop=yOf(bandgap), bgBot=yOf(0);
+    s += `<line x1="${bgX}" y1="${bgTop}" x2="${bgX}" y2="${bgBot}" stroke="#bbb" stroke-width="0.8" stroke-dasharray="3,3"/>`;
+    s += `<line x1="${bgX-3}" y1="${bgTop}" x2="${bgX+3}" y2="${bgTop}" stroke="#bbb" stroke-width="0.8"/>`;
+    s += `<line x1="${bgX-3}" y1="${bgBot}" x2="${bgX+3}" y2="${bgBot}" stroke="#bbb" stroke-width="0.8"/>`;
+    if (annot === 'all') {
+      s += `<text x="${bgX+5}" y="${(bgTop+bgBot)/2+4}" font-size="9" fill="#888" font-family="monospace" font-style="italic">Eg = ${bandgap.toFixed(2)} eV</text>`;
+    }
+  }
+
+  // Energy axis
+  if (showAx) {
+    s += `<line x1="${axX}" y1="${H-PAD_B+10}" x2="${axX}" y2="${PAD_T-10}" stroke="#444" stroke-width="1" marker-end="url(#axarr)"/>`;
+    s += `<text transform="translate(${axX+16},${H/2}) rotate(-90)" text-anchor="middle" font-size="11" fill="#444" font-family="sans-serif">Energy (eV)</text>`;
+    const tickEs = new Set([0, bandgap]);
+    traps.forEach(t => tickEs.add(t.energy));
+    tickEs.forEach(e => {
+      const y = yOf(e);
+      s += `<line x1="${TX1}" y1="${y}" x2="${axX}" y2="${y}" stroke="#ebebeb" stroke-width="0.5" stroke-dasharray="2,4"/>`;
+      s += `<line x1="${axX-5}" y1="${y}" x2="${axX}" y2="${y}" stroke="#888" stroke-width="0.8"/>`;
+      s += `<text x="${axX-8}" y="${y+4}" text-anchor="end" font-size="9" fill="#444" font-family="monospace">${e.toFixed(2)} eV</text>`;
+    });
+  }
+
+  // Material label
+  s += `<text x="${BX0}" y="${PAD_T-10}" font-size="10" font-weight="bold" fill="#777" font-family="sans-serif">${esc(material)}</text>`;
+  // Watermark
+  s += `<text x="${W-4}" y="${H-4}" text-anchor="end" font-size="8" fill="#ccc" font-family="monospace">energy-band-diagram-builder v2</text>`;
+
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-<defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#1a1a1a"/></marker></defs>
+<defs>
+${defs}
+<marker id="axarr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#444"/></marker>
+</defs>
 <rect width="${W}" height="${H}" fill="white"/>
 ${s}
-<text x="${BX0}" y="${PAD_T-10}" font-size="10" font-weight="500" fill="#777" font-family="sans-serif">${esc(document.getElementById('material').value)}</text>
 </svg>`;
-  const blob=new Blob([svg],{type:'image/svg+xml'});
-  const a=document.createElement('a');
-  a.download='energy_band_diagram.svg'; a.href=URL.createObjectURL(blob); a.click();
+
+  const blob = new Blob([svg], {type:'image/svg+xml'});
+  const a = document.createElement('a');
+  a.download = 'energy_band_diagram.svg';
+  a.href = URL.createObjectURL(blob); a.click();
   showToast('SVG downloaded');
 }
-
 function copyPython() {
   const bg=parseFloat(document.getElementById('bandgap').value)||3.03;
   const minE=parseFloat(document.getElementById('mine').value)||-0.3;
