@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Energy Band Diagram Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f; --surface: #181818; --surface2: #222; --surface3: #2a2a2a;
+    --border: #2e2e2e; --border2: #3a3a3a;
+    --text: #e8e6e0; --text2: #888880; --text3: #555550;
+    --accent: #c8f060; --danger: #f06060;
+    --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; min-height: 100vh; display: flex; flex-direction: column; }
+  header { border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; background: var(--surface); flex-shrink: 0; }
+  .logo { font-family: var(--mono); font-size: 13px; color: var(--accent); letter-spacing: 0.05em; }
+  .subtitle { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-top: 2px; }
+  .header-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn { font-family: var(--mono); font-size: 11px; padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border2); background: transparent; color: var(--text2); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 500; }
+  .btn.primary:hover { background: #d8ff70; }
+  .workspace { display: grid; grid-template-columns: 310px 1fr; flex: 1; overflow: hidden; min-height: 0; }
+  .sidebar { border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
+  .sidebar-section { border-bottom: 1px solid var(--border); padding: 14px; }
+  .sidebar-section h3 { font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
+  .field { margin-bottom: 8px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 3px; font-family: var(--mono); }
+  .field input, .field select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: var(--mono); font-size: 12px; padding: 5px 8px; outline: none; transition: border-color 0.15s; }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field select option { background: var(--surface2); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .item-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+  .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .item-index { font-family: var(--mono); font-size: 10px; color: var(--text3); display: flex; align-items: center; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .remove-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 13px; padding: 0 2px; transition: color 0.15s; line-height: 1; }
+  .remove-btn:hover { color: var(--danger); }
+  .add-btn { width: 100%; background: transparent; border: 1px dashed var(--border2); border-radius: 4px; color: var(--text3); cursor: pointer; font-family: var(--mono); font-size: 11px; padding: 7px; transition: all 0.15s; margin-top: 6px; }
+  .add-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .swatch-row { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
+  .swatch { width: 20px; height: 20px; border-radius: 3px; cursor: pointer; border: 2px solid transparent; transition: border-color 0.12s; flex-shrink: 0; }
+  .swatch.circle { border-radius: 50%; }
+  .swatch.sel { border-color: var(--accent); }
+  .hint { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-top: 6px; line-height: 1.5; }
+  .canvas-area { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; background: var(--bg); gap: 12px; overflow: auto; }
+  .canvas-wrapper { background: #fff; border-radius: 6px; box-shadow: 0 0 0 1px var(--border); max-width: 100%; }
+  canvas { display: block; max-width: 100%; }
+  .canvas-meta { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .badge { font-family: var(--mono); font-size: 10px; color: var(--text3); background: var(--surface2); border: 1px solid var(--border); border-radius: 3px; padding: 3px 7px; }
+  footer { border-top: 1px solid var(--border); padding: 8px 20px; display: flex; align-items: center; background: var(--surface); flex-shrink: 0; }
+  .footer-note { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--accent); color: #111; font-family: var(--mono); font-size: 12px; padding: 9px 14px; border-radius: 4px; opacity: 0; transform: translateY(6px); transition: all 0.2s; pointer-events: none; z-index: 100; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">energy-band-diagram-builder v2</div>
+    <div class="subtitle">multi-pathway · auto-layout · annotation control · SVG + PNG export</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn" onclick="copyPython()">copy Python</button>
+    <button class="btn" onclick="downloadSVG()">SVG</button>
+    <button class="btn primary" onclick="downloadPNG()">PNG (300 dpi)</button>
+  </div>
+</header>
+
+<div class="workspace">
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <h3>Material</h3>
+      <div class="field"><label>name</label><input type="text" id="material" value="Rutile TiO₂" oninput="draw()"></div>
+      <div class="field-row">
+        <div class="field"><label>bandgap (eV)</label><input type="number" id="bandgap" value="3.03" step="0.01" min="0.1" max="10" oninput="draw()"></div>
+        <div class="field"><label>min energy (eV)</label><input type="number" id="mine" value="-0.3" step="0.05" oninput="draw()"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>VB label</label><input type="text" id="vb-label" value="Valence band" oninput="draw()"></div>
+        <div class="field"><label>CB label</label><input type="text" id="cb-label" value="Conduction band" oninput="draw()"></div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Trap states</h3>
+      <div id="traps-list"></div>
+      <button class="add-btn" onclick="addTrap()">+ add trap state</button>
+      <div class="hint">sublabel: use ^x for superscript, _x for subscript<br>e.g. Ti^3+ or O_v or Ti^3+/O_v</div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Excitation pathways</h3>
+      <div id="exc-list"></div>
+      <button class="add-btn" onclick="addExc()">+ add excitation</button>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Emission pathways</h3>
+      <div id="em-list"></div>
+      <button class="add-btn" onclick="addEm()">+ add emission</button>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Display</h3>
+      <div class="field-row">
+        <div class="field"><label>annotations</label>
+          <select id="show-annot" onchange="draw()">
+            <option value="all">all labels</option>
+            <option value="arrows">arrows only</option>
+            <option value="none">none</option>
+          </select>
+        </div>
+        <div class="field"><label>NR relaxation</label>
+          <select id="show-nr" onchange="draw()">
+            <option value="yes">show</option>
+            <option value="no">hide</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>bandgap bracket</label>
+          <select id="show-bg" onchange="draw()">
+            <option value="no">hide</option>
+            <option value="yes">show</option>
+          </select>
+        </div>
+        <div class="field"><label>energy axis</label>
+          <select id="show-ax" onchange="draw()">
+            <option value="yes">show</option>
+            <option value="no">hide</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>canvas width (px)</label>
+          <select id="fig-width" onchange="resizeCanvas()">
+            <option value="520">520 (single col)</option>
+            <option value="660" selected>660 (double col)</option>
+            <option value="800">800 (wide)</option>
+          </select>
+        </div>
+        <div class="field"><label>canvas height (px)</label>
+          <input type="number" id="fig-height" value="600" step="20" min="300" max="1200" oninput="resizeCanvas()">
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="canvas-area">
+    <div class="canvas-wrapper">
+      <canvas id="diagram" width="660" height="600"></canvas>
+    </div>
+    <div class="canvas-meta">
+      <span class="badge" id="badge-gap">Eg: 3.03 eV</span>
+      <span class="badge" id="badge-traps">2 trap states</span>
+      <span class="badge" id="badge-paths">1 exc · 1 em</span>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="footer-note">sublabel: ^x = superscript · _x = subscript &nbsp;|&nbsp; PNG exports at 3× resolution (~300 dpi) &nbsp;|&nbsp; SVG is vector — preferred for RSC submission</div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const TRAP_COLORS = ['#dddddd','#bbbbbb','#999999','#777777','#555555','#333333'];
+const PATH_COLORS = ['#1a1a1a','#b03030','#2060a0','#207040','#703090','#a06010'];
+
+const traps = [
+  { label: 'Shallow trap states', sublabel: 'Surface O_v (~0.4 eV below CB)', energy: 2.63, color: '#aaaaaa' },
+  { label: 'Deep trap states', sublabel: 'Ti^3+/O_v (~1.52 eV below CB)', energy: 1.51, color: '#666666' }
+];
+const excitations = [
+  { label: '460 nm excitation', nm: 460, ev: parseFloat((1240/460).toFixed(3)), fromLevel: 'VB', toLevel: 'trap-0', style: 'dashed', colorIdx: 0 }
+];
+const emissions = [
+  { label: 'NIR emission', nm: 820, ev: parseFloat((1240/820).toFixed(3)), fromLevel: 'trap-1', toLevel: 'VB', colorIdx: 0 }
+];
+
+function evOf(nm) { return parseFloat((1240/nm).toFixed(3)); }
+function nmOf(ev) { return parseFloat((1240/ev).toFixed(1)); }
+function snap(v) { return Math.round(v*100)/100; }
+
+function getLevelEnergy(id) {
+  const bg = parseFloat(document.getElementById('bandgap').value)||3.03;
+  if (id==='VB') return 0;
+  if (id==='CB') return bg;
+  const i = parseInt(id.replace('trap-',''));
+  return traps[i] ? traps[i].energy : 0;
+}
+
+function levelOptions(selVal) {
+  let o = `<option value="VB"${selVal==='VB'?' selected':''}>Valence band</option>`;
+  o += `<option value="CB"${selVal==='CB'?' selected':''}>Conduction band</option>`;
+  traps.forEach((t,i) => { o += `<option value="trap-${i}"${selVal===`trap-${i}`?' selected':''}>${t.label||'Trap '+(i+1)}</option>`; });
+  return o;
+}
+
+function addTrap() {
+  const lastE = traps.length ? traps[traps.length-1].energy : 1.5;
+  traps.push({ label: 'Trap state', sublabel: '', energy: snap(lastE+0.4), color: '#888888' });
+  renderAll(); draw();
+}
+function removeTrap(i) {
+  traps.splice(i,1);
+  excitations.forEach(e => { if(e.fromLevel===`trap-${i}`) e.fromLevel='VB'; if(e.toLevel===`trap-${i}`) e.toLevel='CB'; });
+  emissions.forEach(e => { if(e.fromLevel===`trap-${i}`) e.fromLevel='CB'; if(e.toLevel===`trap-${i}`) e.toLevel='VB'; });
+  renderAll(); draw();
+}
+function addExc() {
+  excitations.push({ label: 'Excitation', nm: 400, ev: evOf(400), fromLevel: 'VB', toLevel: traps.length ? 'trap-0' : 'CB', style: 'dashed', colorIdx: excitations.length % PATH_COLORS.length });
+  renderAll(); draw();
+}
+function removeExc(i) { excitations.splice(i,1); renderAll(); draw(); }
+function addEm() {
+  emissions.push({ label: 'Emission', nm: 700, ev: evOf(700), fromLevel: traps.length ? `trap-${traps.length-1}` : 'CB', toLevel: 'VB', colorIdx: emissions.length % PATH_COLORS.length });
+  renderAll(); draw();
+}
+function removeEm(i) { emissions.splice(i,1); renderAll(); draw(); }
+
+function renderTraps() {
+  const el = document.getElementById('traps-list');
+  el.innerHTML = '';
+  traps.forEach((t, i) => {
+    const sw = TRAP_COLORS.map(c => `<div class="swatch${t.color===c?' sel':''}" style="background:${c}" onclick="traps[${i}].color='${c}';renderTraps();draw()"></div>`).join('');
+    el.innerHTML += `<div class="item-card">
+      <div class="item-header"><span class="item-index">trap ${i+1}</span><button class="remove-btn" onclick="removeTrap(${i})">✕</button></div>
+      <div class="field"><label>name</label><input type="text" value="${escH(t.label)}" oninput="traps[${i}].label=this.value;renderAll();draw()"></div>
+      <div class="field"><label>sublabel (^sup _sub)</label><input type="text" value="${escH(t.sublabel)}" oninput="traps[${i}].sublabel=this.value;draw()"></div>
+      <div class="field"><label>energy (eV)</label><input type="number" value="${t.energy}" step="0.01" oninput="traps[${i}].energy=snap(parseFloat(this.value)||0);draw()"></div>
+      <div class="swatch-row">${sw}</div>
+    </div>`;
+  });
+}
+
+function renderExc() {
+  const el = document.getElementById('exc-list');
+  el.innerHTML = '';
+  excitations.forEach((e, i) => {
+    const sw = PATH_COLORS.map((c,ci) => `<div class="swatch circle${e.colorIdx===ci?' sel':''}" style="background:${c}" onclick="excitations[${i}].colorIdx=${ci};renderExc();draw()"></div>`).join('');
+    el.innerHTML += `<div class="item-card">
+      <div class="item-header"><span class="item-index"><span class="dot" style="background:${PATH_COLORS[e.colorIdx]}"></span>exc ${i+1}</span><button class="remove-btn" onclick="removeExc(${i})">✕</button></div>
+      <div class="field"><label>label</label><input type="text" value="${escH(e.label)}" oninput="excitations[${i}].label=this.value;draw()"></div>
+      <div class="field-row">
+        <div class="field"><label>nm</label><input type="number" value="${Math.round(e.nm)}" step="1" oninput="excitations[${i}].nm=parseFloat(this.value);excitations[${i}].ev=evOf(parseFloat(this.value));draw()"></div>
+        <div class="field"><label>eV</label><input type="number" value="${e.ev.toFixed(3)}" step="0.001" oninput="excitations[${i}].ev=parseFloat(this.value);excitations[${i}].nm=nmOf(parseFloat(this.value));draw()"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>from</label><select onchange="excitations[${i}].fromLevel=this.value;draw()">${levelOptions(e.fromLevel)}</select></div>
+        <div class="field"><label>to</label><select onchange="excitations[${i}].toLevel=this.value;draw()">${levelOptions(e.toLevel)}</select></div>
+      </div>
+      <div class="field"><label>style</label>
+        <select onchange="excitations[${i}].style=this.value;draw()">
+          <option value="dashed"${e.style==='dashed'?' selected':''}>dashed</option>
+          <option value="solid"${e.style==='solid'?' selected':''}>solid</option>
+          <option value="dotted"${e.style==='dotted'?' selected':''}>dotted</option>
+        </select>
+      </div>
+      <div class="swatch-row">${sw}</div>
+    </div>`;
+  });
+}
+
+function renderEm() {
+  const el = document.getElementById('em-list');
+  el.innerHTML = '';
+  emissions.forEach((e, i) => {
+    const sw = PATH_COLORS.map((c,ci) => `<div class="swatch circle${e.colorIdx===ci?' sel':''}" style="background:${c}" onclick="emissions[${i}].colorIdx=${ci};renderEm();draw()"></div>`).join('');
+    el.innerHTML += `<div class="item-card">
+      <div class="item-header"><span class="item-index"><span class="dot" style="background:${PATH_COLORS[e.colorIdx]}"></span>em ${i+1}</span><button class="remove-btn" onclick="removeEm(${i})">✕</button></div>
+      <div class="field"><label>label</label><input type="text" value="${escH(e.label)}" oninput="emissions[${i}].label=this.value;draw()"></div>
+      <div class="field-row">
+        <div class="field"><label>nm</label><input type="number" value="${Math.round(e.nm)}" step="1" oninput="emissions[${i}].nm=parseFloat(this.value);emissions[${i}].ev=evOf(parseFloat(this.value));draw()"></div>
+        <div class="field"><label>eV</label><input type="number" value="${e.ev.toFixed(3)}" step="0.001" oninput="emissions[${i}].ev=parseFloat(this.value);emissions[${i}].nm=nmOf(parseFloat(this.value));draw()"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>from</label><select onchange="emissions[${i}].fromLevel=this.value;draw()">${levelOptions(e.fromLevel)}</select></div>
+        <div class="field"><label>to</label><select onchange="emissions[${i}].toLevel=this.value;draw()">${levelOptions(e.toLevel)}</select></div>
+      </div>
+      <div class="swatch-row">${sw}</div>
+    </div>`;
+  });
+}
+
+function renderAll() { renderTraps(); renderExc(); renderEm(); }
+function escH(s) { return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function resizeCanvas() {
+  const c = document.getElementById('diagram');
+  c.width = parseInt(document.getElementById('fig-width').value)||660;
+  c.height = parseInt(document.getElementById('fig-height').value)||600;
+  draw();
+}
+
+function drawSubLabel(ctx, text, cx, y, size, color) {
+  if (!text) return 0;
+  const ns = size, ss = size * 0.72;
+  const parts = [];
+  let cur = '', mode = 'n';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '^' || ch === '_') {
+      if (cur) parts.push({t:cur, m:mode});
+      cur = ''; mode = ch==='^'?'sup':'sub';
+    } else if (mode !== 'n' && cur.length > 0) {
+      const isEndChar = /[\s,()~\/]/.test(ch) || (isNaN(ch) && !isNaN(cur[cur.length-1]));
+      if (isEndChar) { parts.push({t:cur, m:mode}); cur=ch; mode='n'; }
+      else cur += ch;
+    } else { cur += ch; }
+  }
+  if (cur) parts.push({t:cur, m:mode});
+  ctx.save();
+  let tw = 0;
+  parts.forEach(p => { ctx.font = `400 ${p.m==='n'?ns:ss}px "IBM Plex Sans",sans-serif`; tw += ctx.measureText(p.t).width; });
+  let px = cx - tw/2;
+  parts.forEach(p => {
+    ctx.font = `400 ${p.m==='n'?ns:ss}px "IBM Plex Sans",sans-serif`;
+    ctx.fillStyle = color||'#666';
+    const dy = p.m==='sup' ? -ns*0.28 : p.m==='sub' ? ns*0.18 : 0;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(p.t, px, y+dy);
+    px += ctx.measureText(p.t).width;
+  });
+  ctx.restore();
+  return tw;
+}
+
+function draw() {
+  const canvas = document.getElementById('diagram');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,W,H);
+
+  const bandgap = parseFloat(document.getElementById('bandgap').value)||3.03;
+  const material = document.getElementById('material').value;
+  const vbLabel = document.getElementById('vb-label').value;
+  const cbLabel = document.getElementById('cb-label').value;
+  const minE = parseFloat(document.getElementById('mine').value)||-0.3;
+  const maxE = bandgap + 0.45;
+  const eRange = maxE - minE;
+  const annot = document.getElementById('show-annot').value;
+  const showNR = document.getElementById('show-nr').value==='yes';
+  const showBG = document.getElementById('show-bg').value==='yes';
+  const showAx = document.getElementById('show-ax').value==='yes';
+
+  document.getElementById('badge-gap').textContent = `Eg: ${bandgap.toFixed(2)} eV`;
+  document.getElementById('badge-traps').textContent = `${traps.length} trap state${traps.length!==1?'s':''}`;
+  document.getElementById('badge-paths').textContent = `${excitations.length} exc · ${emissions.length} em`;
+
+  // Measure label widths first for dynamic layout
+  const LABEL_FONT = '500 10px "IBM Plex Sans",sans-serif';
+  const SUB_FONT   = '400 9px "IBM Plex Sans",sans-serif';
+  const TICK_FONT  = '9px "IBM Plex Mono",monospace';
+  const AX_LABEL_W = showAx ? 22 : 0;
+  const TICK_W     = showAx ? 44 : 0;
+
+  let maxLabelW = 0;
+  if (annot !== 'none' && traps.length > 0) {
+    traps.forEach(t => {
+      ctx.font = LABEL_FONT;
+      const nw = ctx.measureText(t.label).width;
+      ctx.font = SUB_FONT;
+      const sw = t.sublabel ? ctx.measureText(t.sublabel.replace(/[\^_]\S+/g,'')).width + 10 : 0;
+      maxLabelW = Math.max(maxLabelW, nw, sw);
+    });
+  }
+  maxLabelW = Math.ceil(maxLabelW) + 16;
+
+  const PAD_L = 44;
+  const PAD_T = 46;
+  const PAD_B = 52;
+  const PAD_R = maxLabelW + TICK_W + AX_LABEL_W + 10;
+  const plotH = H - PAD_T - PAD_B;
+  const plotW = W - PAD_L - PAD_R;
+
+  function yOf(e) { return PAD_T + plotH*(1-(e-minE)/eRange); }
+  function yOfLevel(id) { return yOf(getLevelEnergy(id)); }
+  function isBand(id) { return id==='VB'||id==='CB'; }
+
+  const BX0 = PAD_L, BX1 = PAD_L + plotW*0.72, BW = BX1-BX0, BH = 20;
+  const TX0 = PAD_L + plotW*0.12, TX1 = BX1, TW = TX1-TX0, TH = 11;
+  const labelX = TX1 + 12;
+  const axX = W - AX_LABEL_W - 10;
+
+  function rrect(x,y,w,h,r) {
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+    ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+  }
+
+  // drawBand: yEdge is the INNER edge of the band (top of VB, bottom of CB)
+  // dir: 'down' = band extends downward from yEdge (VB), 'up' = extends upward (CB)
+  function drawBand(yEdge, label, fill, dir) {
+    const y = dir==='down' ? yEdge : yEdge - BH;
+    rrect(BX0,y,BW,BH,4); ctx.fillStyle=fill; ctx.fill();
+    ctx.strokeStyle='#1a1a1a'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='500 11px "IBM Plex Sans",sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(label, BX0+BW/2, y+BH/2);
+  }
+
+  function drawTrapBar(yc, fill) {
+    rrect(TX0,yc-TH/2,TW,TH,3); ctx.fillStyle=fill; ctx.fill();
+    ctx.strokeStyle='#333'; ctx.lineWidth=0.7; ctx.stroke();
+  }
+
+  function arrowTip(x,y,up,sz,color) {
+    const angle = up ? -Math.PI/2 : Math.PI/2;
+    ctx.save(); ctx.fillStyle=color;
+    ctx.beginPath();
+    ctx.moveTo(x,y);
+    ctx.lineTo(x-sz*Math.cos(angle-0.38), y-sz*Math.sin(angle-0.38));
+    ctx.lineTo(x-sz*Math.cos(angle+0.38), y-sz*Math.sin(angle+0.38));
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+
+  function drawVertArrow(x, y1, y2, style, color, lw) {
+    lw = lw||1.4;
+    const goesUp = y2 < y1;
+    ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=lw;
+    if (style==='dashed') ctx.setLineDash([5,4]);
+    else if (style==='dotted') ctx.setLineDash([2,3]);
+    else ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(x,y1); ctx.lineTo(x,y2); ctx.stroke();
+    ctx.setLineDash([]);
+    arrowTip(x, y2, goesUp, lw>1.8?8:6, color);
+    ctx.restore();
+  }
+
+  drawBand(yOf(0), vbLabel, '#3a3a3a', 'down');       // VB: top edge at yOf(0), extends down
+  drawBand(yOf(bandgap), cbLabel, '#3a3a3a', 'up');  // CB: bottom edge at yOf(bandgap), extends up
+  traps.forEach(t => drawTrapBar(yOf(t.energy), t.color));
+
+  // Trap labels with collision avoidance
+  if (annot !== 'none') {
+    const sortedByE = [...traps].map((t,i)=>({...t,i})).sort((a,b)=>b.energy-a.energy);
+    const usedY = [];
+    const MIN_GAP = 26;
+    sortedByE.forEach(t => {
+      const rawY = yOf(t.energy);
+      let ly = rawY;
+      for (let iter = 0; iter < 40; iter++) {
+        if (!usedY.some(uy => Math.abs(uy-ly) < MIN_GAP)) break;
+        ly += MIN_GAP;
+      }
+      usedY.push(ly);
+      if (Math.abs(ly-rawY) > 4) {
+        ctx.save(); ctx.strokeStyle='#ccc'; ctx.lineWidth=0.4; ctx.setLineDash([2,4]);
+        ctx.beginPath(); ctx.moveTo(TX1+2,rawY); ctx.lineTo(labelX-2,ly); ctx.stroke();
+        ctx.setLineDash([]); ctx.restore();
+      }
+      ctx.font = LABEL_FONT; ctx.fillStyle='#1a1a1a';
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText(t.label, labelX, t.sublabel ? ly-7 : ly);
+      if (t.sublabel) {
+        ctx.font = SUB_FONT; ctx.fillStyle='#666'; ctx.textBaseline='middle';
+        ctx.fillText(t.sublabel.replace(/\^(\S+)/g,'$1').replace(/_(\S+)/g,'$1'), labelX, ly+8);
+      }
+    });
+  }
+
+  // Pathway arrows
+  const nExc = excitations.length, nEm = emissions.length;
+  const excSpacing = TW/(nExc+1), emSpacing = TW/(nEm+1);
+
+  // Get the correct edge of a level for arrow connection:
+  // bands connect at their inner edge (top of VB, bottom of CB),
+  // trap levels connect at their top or bottom edge depending on direction.
+  function levelEdgeY(id, goingUp) {
+    if (id === 'VB') return yOf(0);               // top edge of VB = yOf(0) exactly
+    if (id === 'CB') return yOf(bandgap);         // bottom edge of CB = yOf(bandgap) exactly
+    return goingUp ? yOf(getLevelEnergy(id)) - TH/2 : yOf(getLevelEnergy(id)) + TH/2;
+  }
+
+  excitations.forEach((e, i) => {
+    const x = TX0 + excSpacing*(i+1);
+    const fromE = getLevelEnergy(e.fromLevel), toE = getLevelEnergy(e.toLevel);
+    const goingUp = toE > fromE;
+    const yStart = levelEdgeY(e.fromLevel, goingUp);
+    const yEnd   = levelEdgeY(e.toLevel, goingUp);
+    const col = PATH_COLORS[e.colorIdx];
+    drawVertArrow(x, yStart, yEnd, e.style, col, 1.4);
+    if (annot === 'all') {
+      const midY = (yStart+yEnd)/2;
+      ctx.save(); ctx.fillStyle=col;
+      ctx.font='italic 8.5px "IBM Plex Mono",monospace';
+      ctx.textAlign='right'; ctx.textBaseline='middle';
+      ctx.fillText(e.label, x-5, midY-7);
+      ctx.fillText(`${e.ev.toFixed(2)} eV`, x-5, midY+5);
+      ctx.restore();
+    }
+  });
+
+  emissions.forEach((e, i) => {
+    const x = TX0 + emSpacing*(i+1) + TW*0.08;
+    const fromE = getLevelEnergy(e.fromLevel), toE = getLevelEnergy(e.toLevel);
+    const goingUp = toE > fromE;
+    const yStart = levelEdgeY(e.fromLevel, !goingUp);
+    const yEnd   = levelEdgeY(e.toLevel, !goingUp);
+    const col = PATH_COLORS[e.colorIdx];
+    drawVertArrow(x, yStart, yEnd, 'solid', col, 2.0);
+    if (annot === 'all') {
+      const midY = (yStart+yEnd)/2;
+      ctx.save(); ctx.fillStyle=col;
+      ctx.font='500 9px "IBM Plex Sans",sans-serif';
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText(e.label, x+8, midY-7);
+      ctx.fillStyle = col==='#1a1a1a'?'#555':col;
+      ctx.font='400 8.5px "IBM Plex Mono",monospace';
+      ctx.fillText(`~${Math.round(e.nm)} nm (${e.ev.toFixed(3)} eV)`, x+8, midY+5);
+      ctx.restore();
+    }
+  });
+
+  // Non-radiative relaxation
+  if (showNR && traps.length > 1 && annot !== 'none') {
+    const sorted = [...traps].sort((a,b)=>b.energy-a.energy);
+    const nrX = TX0 + TW*0.88;
+    for (let i = 0; i < sorted.length-1; i++) {
+      drawVertArrow(nrX, yOf(sorted[i].energy)+TH/2, yOf(sorted[i+1].energy)-TH/2, 'dotted', '#999', 1.0);
+    }
+    if (annot === 'all') {
+      const nrMid = (yOf(sorted[0].energy)+yOf(sorted[sorted.length-1].energy))/2;
+      ctx.fillStyle='#999'; ctx.font='italic 8px "IBM Plex Mono",monospace';
+      ctx.textAlign='right'; ctx.textBaseline='middle';
+      ctx.fillText('non-radiative', nrX-4, nrMid-6);
+      ctx.fillText('relaxation', nrX-4, nrMid+6);
+    }
+  }
+
+  // Bandgap bracket — top of VB to bottom of CB (physically correct)
+  if (showBG && annot !== 'none') {
+    const bgX = BX1 + 18;
+    const bgTop = yOf(bandgap);  // bottom edge of CB = yOf(bandgap)
+    const bgBot = yOf(0);        // top edge of VB = yOf(0)
+    ctx.save(); ctx.strokeStyle='#bbb'; ctx.lineWidth=0.8; ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(bgX, bgTop); ctx.lineTo(bgX, bgBot); ctx.stroke();
+    ctx.setLineDash([]);
+    [bgTop, bgBot].forEach(y => {
+      ctx.beginPath(); ctx.moveTo(bgX-3,y); ctx.lineTo(bgX+3,y); ctx.strokeStyle='#bbb'; ctx.stroke();
+    });
+    if (annot==='all') {
+      ctx.fillStyle='#888'; ctx.font='italic 9px "IBM Plex Mono",monospace';
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText(`Eg = ${bandgap.toFixed(2)} eV`, bgX+5, (bgTop+bgBot)/2);
+    }
+    ctx.restore();
+  }
+
+  // Energy axis — dynamic position, tick labels on axis with units
+  if (showAx) {
+    ctx.save();
+    ctx.strokeStyle='#444'; ctx.fillStyle='#444'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(axX, H-PAD_B+10); ctx.lineTo(axX, PAD_T-10); ctx.stroke();
+    arrowTip(axX, PAD_T-10, true, 5, '#444');
+    ctx.save(); ctx.translate(axX+16, H/2); ctx.rotate(-Math.PI/2);
+    ctx.font='11px "IBM Plex Sans",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('Energy (eV)', 0, 0); ctx.restore();
+
+    const tickEs = new Set([0, bandgap]);
+    traps.forEach(t => tickEs.add(t.energy));
+    tickEs.forEach(e => {
+      const y = yOf(e);
+      ctx.strokeStyle='#ebebeb'; ctx.lineWidth=0.5; ctx.setLineDash([2,4]);
+      ctx.beginPath(); ctx.moveTo(TX1, y); ctx.lineTo(axX, y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle='#888'; ctx.lineWidth=0.8;
+      ctx.beginPath(); ctx.moveTo(axX-5,y); ctx.lineTo(axX,y); ctx.stroke();
+      ctx.fillStyle='#444'; ctx.font=TICK_FONT;
+      ctx.textAlign='right'; ctx.textBaseline='middle';
+      ctx.fillText(`${e.toFixed(2)} eV`, axX-8, y);
+    });
+    ctx.restore();
+  }
+
+  ctx.fillStyle='#777'; ctx.font='500 10px "IBM Plex Sans",sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='bottom';
+  ctx.fillText(material, BX0, PAD_T-8);
+
+  ctx.fillStyle='#ccc'; ctx.font='8px "IBM Plex Mono",monospace';
+  ctx.textAlign='right'; ctx.textBaseline='bottom';
+  ctx.fillText('energy-band-diagram-builder v2', W-4, H-4);
+}
+function downloadPNG() {
+  draw();
+  const src = document.getElementById('diagram');
+  const hi = document.createElement('canvas');
+  hi.width = src.width*3; hi.height = src.height*3;
+  const c2 = hi.getContext('2d'); c2.scale(3,3); c2.drawImage(src,0,0);
+  const a = document.createElement('a');
+  a.download='energy_band_diagram_300dpi.png';
+  a.href=hi.toDataURL('image/png'); a.click();
+  showToast('PNG downloaded (300 dpi)');
+}
+
+function downloadSVG() {
+  const canvas = document.getElementById('diagram');
+  const W=canvas.width, H=canvas.height;
+  const bandgap=parseFloat(document.getElementById('bandgap').value)||3.03;
+  const minE=parseFloat(document.getElementById('mine').value)||-0.3;
+  const maxE=bandgap+0.45, eRange=maxE-minE;
+  const PAD_L=76,PAD_R=52,PAD_T=46,PAD_B=52;
+  const plotH=H-PAD_T-PAD_B, plotW=W-PAD_L-PAD_R;
+  const BX0=PAD_L,BX1=PAD_L+plotW*0.52,BW=BX1-BX0,BH=20;
+  const TX0=PAD_L+plotW*0.10,TX1=BX1,TW=TX1-TX0,TH=11;
+  function yOf(e) { return PAD_T+plotH*(1-(e-minE)/eRange); }
+  function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  let s = '';
+  s += `<rect x="${BX0}" y="${yOf(0)-BH/2}" width="${BW}" height="${BH}" rx="4" fill="#3a3a3a" stroke="#1a1a1a" stroke-width="1"/>`;
+  s += `<text x="${BX0+BW/2}" y="${yOf(0)+4}" text-anchor="middle" font-size="11" font-weight="500" fill="white" font-family="sans-serif">${esc(document.getElementById('vb-label').value)}</text>`;
+  s += `<rect x="${BX0}" y="${yOf(bandgap)-BH/2}" width="${BW}" height="${BH}" rx="4" fill="#3a3a3a" stroke="#1a1a1a" stroke-width="1"/>`;
+  s += `<text x="${BX0+BW/2}" y="${yOf(bandgap)+4}" text-anchor="middle" font-size="11" font-weight="500" fill="white" font-family="sans-serif">${esc(document.getElementById('cb-label').value)}</text>`;
+  traps.forEach((t,i) => {
+    const ty=yOf(t.energy);
+    s += `<rect x="${TX0}" y="${ty-TH/2}" width="${TW}" height="${TH}" rx="3" fill="${t.color}" stroke="#333" stroke-width="0.7"/>`;
+    s += `<text x="${TX1+12}" y="${ty-4}" font-size="10.5" font-weight="500" fill="#1a1a1a" font-family="sans-serif">${esc(t.label)}</text>`;
+    if (t.sublabel) { const plain=t.sublabel.replace(/[\^_]/g,''); s += `<text x="${TX1+12}" y="${ty+14}" font-size="9" fill="#666" font-family="monospace">${esc(plain)}</text>`; }
+  });
+  const nExc=excitations.length, nEm=emissions.length;
+  const excSp=TW/(nExc+1), emSp=TW/(nEm+1);
+  excitations.forEach((e,i)=>{
+    const x=TX0+excSp*(i+1);
+    const y1=yOf(getLevelEnergy(e.fromLevel)), y2=yOf(getLevelEnergy(e.toLevel));
+    const col=PATH_COLORS[e.colorIdx];
+    const ld=e.style==='dashed'?'5,4':e.style==='dotted'?'2,3':'none';
+    s += `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="1.4" stroke-dasharray="${ld}" marker-end="url(#arr)"/>`;
+  });
+  emissions.forEach((e,i)=>{
+    const x=TX0+emSp*(i+1)+TW*0.1;
+    const y1=yOf(getLevelEnergy(e.fromLevel)), y2=yOf(getLevelEnergy(e.toLevel));
+    const col=PATH_COLORS[e.colorIdx];
+    s += `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="2" marker-end="url(#arr)"/>`;
+  });
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+<defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#1a1a1a"/></marker></defs>
+<rect width="${W}" height="${H}" fill="white"/>
+${s}
+<text x="${BX0}" y="${PAD_T-10}" font-size="10" font-weight="500" fill="#777" font-family="sans-serif">${esc(document.getElementById('material').value)}</text>
+</svg>`;
+  const blob=new Blob([svg],{type:'image/svg+xml'});
+  const a=document.createElement('a');
+  a.download='energy_band_diagram.svg'; a.href=URL.createObjectURL(blob); a.click();
+  showToast('SVG downloaded');
+}
+
+function copyPython() {
+  const bg=parseFloat(document.getElementById('bandgap').value)||3.03;
+  const minE=parseFloat(document.getElementById('mine').value)||-0.3;
+  const trapJ=JSON.stringify(traps.map(t=>({label:t.label,sublabel:t.sublabel,energy:t.energy,color:t.color})),null,4);
+  const excJ=JSON.stringify(excitations.map(e=>({label:e.label,nm:Math.round(e.nm),ev:parseFloat(e.ev.toFixed(3)),fromLevel:e.fromLevel,toLevel:e.toLevel,style:e.style,color:PATH_COLORS[e.colorIdx]})),null,4);
+  const emJ=JSON.stringify(emissions.map(e=>({label:e.label,nm:Math.round(e.nm),ev:parseFloat(e.ev.toFixed(3)),fromLevel:e.fromLevel,toLevel:e.toLevel,color:PATH_COLORS[e.colorIdx]})),null,4);
+  const py=`"""
+Energy band diagram — generated by energy-band-diagram-builder v2
+Run: python energy_band_diagram.py
+"""
+import matplotlib; matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import os
+
+BANDGAP  = ${bg}
+MIN_E    = ${minE}
+MAX_E    = BANDGAP + 0.45
+MATERIAL = "${document.getElementById('material').value}"
+VB_LABEL = "${document.getElementById('vb-label').value}"
+CB_LABEL = "${document.getElementById('cb-label').value}"
+SHOW_NR  = ${document.getElementById('show-nr').value==='yes'?'True':'False'}
+SHOW_BG  = ${document.getElementById('show-bg').value==='yes'?'True':'False'}
+
+TRAPS       = ${trapJ}
+EXCITATIONS = ${excJ}
+EMISSIONS   = ${emJ}
+
+fig, ax = plt.subplots(figsize=(7, 6.5))
+ax.set_xlim(0,10); ax.set_ylim(MIN_E, MAX_E); ax.axis('off')
+BX0,BX1=1.0,6.0; BW=BX1-BX0; BH=0.21
+TX0,TX1=1.6,BX1; TW=TX1-TX0; TH=0.12
+
+def level_y(lid):
+    if lid=='VB': return 0
+    if lid=='CB': return BANDGAP
+    return TRAPS[int(lid.replace('trap-',''))]['energy']
+
+def draw_band(y, label, color='#3a3a3a'):
+    ax.add_patch(mpatches.FancyBboxPatch((BX0,y-BH/2),BW,BH,
+        boxstyle="round,pad=0.02",linewidth=1.0,edgecolor='#1a1a1a',facecolor=color))
+    ax.text((BX0+BX1)/2,y,label,ha='center',va='center',fontsize=10,fontweight='bold',color='white')
+
+def draw_trap(y, color):
+    ax.add_patch(mpatches.FancyBboxPatch((TX0,y-TH/2),TW,TH,
+        boxstyle="round,pad=0.01",linewidth=0.7,edgecolor='#333',facecolor=color))
+
+draw_band(0,VB_LABEL); draw_band(BANDGAP,CB_LABEL)
+for i,t in enumerate(TRAPS):
+    draw_trap(t['energy'],t['color'])
+    ax.text(TX1+0.15,t['energy']+0.07,t['label'],fontsize=9,fontweight='bold',va='bottom')
+    if t['sublabel']:
+        ax.text(TX1+0.15,t['energy']-0.07,t['sublabel'].replace('^','').replace('_',''),
+                fontsize=8,color='#666',va='top',style='italic')
+
+n_exc=len(EXCITATIONS); n_em=len(EMISSIONS)
+for i,e in enumerate(EXCITATIONS):
+    x=TX0+TW/(n_exc+1)*(i+1)
+    ls='--' if e['style']=='dashed' else ':' if e['style']=='dotted' else '-'
+    ax.annotate('',xy=(x,level_y(e['toLevel'])),xytext=(x,level_y(e['fromLevel'])),
+        arrowprops=dict(arrowstyle='->',lw=1.4,color=e['color'],linestyle=ls))
+    mid=(level_y(e['fromLevel'])+level_y(e['toLevel']))/2
+    ax.text(x-0.08,mid,e['label'],ha='right',va='center',fontsize=8,style='italic',color=e['color'])
+    ax.text(x-0.08,mid-0.14,f"{e['ev']:.2f} eV",ha='right',va='center',fontsize=7.5,color=e['color'])
+
+for i,e in enumerate(EMISSIONS):
+    x=TX0+TW/(n_em+1)*(i+1)+TW*0.1
+    ax.annotate('',xy=(x,level_y(e['toLevel'])),xytext=(x,level_y(e['fromLevel'])),
+        arrowprops=dict(arrowstyle='->',lw=2.0,color=e['color']))
+    mid=(level_y(e['fromLevel'])+level_y(e['toLevel']))/2
+    ax.text(x+0.1,mid,e['label'],ha='left',va='center',fontsize=9,fontweight='bold',color=e['color'])
+    ax.text(x+0.1,mid-0.14,f"~{e['nm']} nm ({e['ev']:.3f} eV)",ha='left',va='center',fontsize=7.5,color=e['color'])
+
+if SHOW_NR and len(TRAPS)>1:
+    st=sorted(TRAPS,key=lambda x:-x['energy']); nr_x=TX0+TW*0.88
+    for i in range(len(st)-1):
+        ax.annotate('',xy=(nr_x,st[i+1]['energy']),xytext=(nr_x,st[i]['energy']),
+            arrowprops=dict(arrowstyle='->',lw=1.0,linestyle=':',color='#999'))
+
+if SHOW_BG:
+    bx=BX1+0.15
+    ax.annotate('',xy=(bx,BANDGAP),xytext=(bx,0),
+        arrowprops=dict(arrowstyle='<->',lw=0.8,color='#bbb'))
+    ax.text(bx+0.1,BANDGAP/2,f'Eg={BANDGAP:.2f} eV',ha='left',va='center',fontsize=8,color='#888',style='italic')
+
+ax_x=9.3
+ax.annotate('',xy=(ax_x,MAX_E-0.1),xytext=(ax_x,MIN_E+0.05),
+    arrowprops=dict(arrowstyle='->',lw=1.2,color='#444'))
+ax.text(ax_x+0.3,(MAX_E+MIN_E)/2,'Energy (eV)',ha='left',va='center',fontsize=9,rotation=90,color='#444')
+for e in [0,BANDGAP]+[t['energy'] for t in TRAPS]:
+    ax.plot([ax_x-0.12,ax_x],[e,e],'-',color='#888',lw=0.7)
+    ax.text(BX0-0.1,e,f'{e:.2f}',ha='right',va='center',fontsize=8.5,fontfamily='monospace',color='#444')
+ax.text(BX0,MAX_E-0.05,MATERIAL,fontsize=9,color='#777')
+plt.tight_layout()
+out=os.path.dirname(os.path.abspath(__file__))
+fig.savefig(os.path.join(out,'energy_band_diagram.pdf'),bbox_inches='tight',dpi=300)
+fig.savefig(os.path.join(out,'energy_band_diagram.png'),bbox_inches='tight',dpi=300)
+print('Saved.')
+`;
+  navigator.clipboard.writeText(py).then(()=>showToast('Python script copied to clipboard'));
+}
+
+function showToast(msg) {
+  const t=document.getElementById('toast'); t.textContent=msg;
+  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+renderAll(); draw();
+</script>
+</body>
+</html>
