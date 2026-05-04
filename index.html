@@ -150,6 +150,10 @@
           <input type="number" id="fig-height" value="600" step="20" min="300" max="1200" oninput="resizeCanvas()">
         </div>
       </div>
+      <div class="field">
+        <label>axis gap (px) — space between diagram and axis</label>
+        <input type="number" id="axis-gap" value="0" step="5" min="-60" max="200" oninput="draw()">
+      </div>
     </div>
 
   </div>
@@ -605,6 +609,7 @@ function draw() {
 
   ctx.fillStyle='#ccc'; ctx.font='8px "IBM Plex Mono",monospace';
   ctx.textAlign='right'; ctx.textBaseline='bottom';
+  ctx.fillText('energy-band-diagram-builder v2', W-4, H-4);
 }
 function downloadPNG() {
   draw();
