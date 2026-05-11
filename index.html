@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Energy Band Diagram Builder</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root {
     --bg: #0f0f0f; --surface: #181818; --surface2: #222; --surface3: #2a2a2a;
@@ -63,12 +64,13 @@
 <header>
   <div>
     <div class="logo">energy-band-diagram-builder v2</div>
-    <div class="subtitle">multi-pathway · auto-layout · annotation control · SVG + PNG export</div>
+    <div class="subtitle">multi-pathway · auto-layout · annotation control · SVG + PNG + PDF export</div>
   </div>
   <div class="header-actions">
     <button class="btn" onclick="copyPython()">copy Python</button>
     <button class="btn" onclick="downloadSVG()">SVG</button>
-    <button class="btn primary" onclick="downloadPNG()">PNG (300 dpi)</button>
+    <button class="btn" onclick="downloadPNG()">PNG (300 dpi)</button>
+    <button class="btn primary" onclick="downloadPDF()">PDF (600 dpi)</button>
   </div>
 </header>
 
@@ -173,7 +175,7 @@
 </div>
 
 <footer>
-  <div class="footer-note">sublabel: ^x = superscript · _x = subscript &nbsp;|&nbsp; PNG exports at 3× resolution (~300 dpi) &nbsp;|&nbsp; SVG is vector — preferred for RSC submission</div>
+  <div class="footer-note">sublabel: ^x = superscript · _x = subscript &nbsp;|&nbsp; PNG 300 dpi · PDF 600 dpi · SVG vector &nbsp;|&nbsp; SVG preferred for RSC submission</div>
 </footer>
 
 <div class="toast" id="toast"></div>
@@ -301,8 +303,6 @@ function renderEm() {
 function fitCanvasToAxis() {
   const baseW = parseInt(document.getElementById('fig-width').value)||660;
   const gap = parseInt(document.getElementById('axis-gap').value)||0;
-  // axis moves left when gap is positive, so canvas needs to shrink;
-  // axis moves right when gap is negative, so canvas needs to grow
   document.getElementById('diagram').width = baseW - gap;
 }
 
@@ -321,14 +321,11 @@ function drawSubLabel(ctx, text, cx, y, size, color) {
   const ns = size, ss = size * 0.72;
   const parts = [];
   let cur = '', mode = 'n';
-  // Parse: ^x or ^{xxx} for superscript, _x or _{xxx} for subscript
-  // A run ends only at the next ^, _, space, or end of string
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (ch === '^' || ch === '_') {
       if (cur) parts.push({t:cur, m:mode});
       cur = ''; mode = ch==='^'?'sup':'sub';
-      // Support bracketed syntax ^{...} or _{...}
       if (text[i+1] === '{') {
         const close = text.indexOf('}', i+2);
         if (close !== -1) {
@@ -337,7 +334,6 @@ function drawSubLabel(ctx, text, cx, y, size, color) {
         }
       }
     } else if (ch === ' ' && mode !== 'n') {
-      // space always ends a super/sub run
       if (cur) parts.push({t:cur, m:mode});
       cur = ' '; mode = 'n';
     } else {
@@ -348,7 +344,6 @@ function drawSubLabel(ctx, text, cx, y, size, color) {
   ctx.save();
   let tw = 0;
   parts.forEach(p => { ctx.font = `400 ${p.m==='n'?ns:ss}px "IBM Plex Sans",sans-serif`; tw += ctx.measureText(p.t).width; });
-  // align: 'left' starts at cx, default centres on cx
   let px = (arguments[6] === 'left') ? cx : cx - tw/2;
   parts.forEach(p => {
     ctx.font = `400 ${p.m==='n'?ns:ss}px "IBM Plex Sans",sans-serif`;
@@ -362,10 +357,7 @@ function drawSubLabel(ctx, text, cx, y, size, color) {
   return tw;
 }
 
-function draw() {
-  const canvas = document.getElementById('diagram');
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
+function drawToContext(ctx, W, H) {
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle = '#fff'; ctx.fillRect(0,0,W,H);
 
@@ -381,11 +373,6 @@ function draw() {
   const showBG = document.getElementById('show-bg').value==='yes';
   const showAx = document.getElementById('show-ax').value==='yes';
 
-  document.getElementById('badge-gap').textContent = `Eg: ${bandgap.toFixed(2)} eV`;
-  document.getElementById('badge-traps').textContent = `${traps.length} trap state${traps.length!==1?'s':''}`;
-  document.getElementById('badge-paths').textContent = `${excitations.length} exc · ${emissions.length} em`;
-
-  // Measure label widths first for dynamic layout
   const LABEL_FONT = '500 10px "IBM Plex Sans",sans-serif';
   const SUB_FONT   = '400 9px "IBM Plex Sans",sans-serif';
   const TICK_FONT  = '9px "IBM Plex Mono",monospace';
@@ -412,8 +399,6 @@ function draw() {
   const plotW = W - PAD_L - PAD_R;
 
   function yOf(e) { return PAD_T + plotH*(1-(e-minE)/eRange); }
-  function yOfLevel(id) { return yOf(getLevelEnergy(id)); }
-  function isBand(id) { return id==='VB'||id==='CB'; }
 
   const BX0 = PAD_L, BX1 = PAD_L + plotW*0.72, BW = BX1-BX0, BH = 20;
   const TX0 = PAD_L + plotW*0.12, TX1 = BX1, TW = TX1-TX0, TH = 11;
@@ -429,8 +414,6 @@ function draw() {
     ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
   }
 
-  // drawBand: yEdge is the INNER edge of the band (top of VB, bottom of CB)
-  // dir: 'down' = band extends downward from yEdge (VB), 'up' = extends upward (CB)
   function drawBand(yEdge, label, fill, dir) {
     const y = dir==='down' ? yEdge : yEdge - BH;
     rrect(BX0,y,BW,BH,4); ctx.fillStyle=fill; ctx.fill();
@@ -468,11 +451,10 @@ function draw() {
     ctx.restore();
   }
 
-  drawBand(yOf(0), vbLabel, '#3a3a3a', 'down');       // VB: top edge at yOf(0), extends down
-  drawBand(yOf(bandgap), cbLabel, '#3a3a3a', 'up');  // CB: bottom edge at yOf(bandgap), extends up
+  drawBand(yOf(0), vbLabel, '#3a3a3a', 'down');
+  drawBand(yOf(bandgap), cbLabel, '#3a3a3a', 'up');
   traps.forEach(t => drawTrapBar(yOf(t.energy), t.color));
 
-  // Trap labels with collision avoidance
   if (annot !== 'none') {
     const sortedByE = [...traps].map((t,i)=>({...t,i})).sort((a,b)=>b.energy-a.energy);
     const usedY = [];
@@ -494,22 +476,17 @@ function draw() {
       ctx.textAlign='left'; ctx.textBaseline='middle';
       ctx.fillText(t.label, labelX, t.sublabel ? ly-7 : ly);
       if (t.sublabel) {
-        // Use drawSubLabel for proper super/subscript rendering
         drawSubLabel(ctx, t.sublabel, labelX, ly+8, 9, '#666', 'left');
       }
     });
   }
 
-  // Pathway arrows
   const nExc = excitations.length, nEm = emissions.length;
   const excSpacing = TW/(nExc+1), emSpacing = TW/(nEm+1);
 
-  // Get the correct edge of a level for arrow connection:
-  // bands connect at their inner edge (top of VB, bottom of CB),
-  // trap levels connect at their top or bottom edge depending on direction.
   function levelEdgeY(id, goingUp) {
-    if (id === 'VB') return yOf(0);               // top edge of VB = yOf(0) exactly
-    if (id === 'CB') return yOf(bandgap);         // bottom edge of CB = yOf(bandgap) exactly
+    if (id === 'VB') return yOf(0);
+    if (id === 'CB') return yOf(bandgap);
     return goingUp ? yOf(getLevelEnergy(id)) - TH/2 : yOf(getLevelEnergy(id)) + TH/2;
   }
 
@@ -553,7 +530,6 @@ function draw() {
     }
   });
 
-  // Non-radiative relaxation
   if (showNR && traps.length > 1 && annot !== 'none') {
     const sorted = [...traps].sort((a,b)=>b.energy-a.energy);
     const nrX = TX0 + TW*0.88;
@@ -569,11 +545,10 @@ function draw() {
     }
   }
 
-  // Bandgap bracket — top of VB to bottom of CB (physically correct)
   if (showBG && annot !== 'none') {
     const bgX = BX1 + 18;
-    const bgTop = yOf(bandgap);  // bottom edge of CB = yOf(bandgap)
-    const bgBot = yOf(0);        // top edge of VB = yOf(0)
+    const bgTop = yOf(bandgap);
+    const bgBot = yOf(0);
     ctx.save(); ctx.strokeStyle='#bbb'; ctx.lineWidth=0.8; ctx.setLineDash([3,3]);
     ctx.beginPath(); ctx.moveTo(bgX, bgTop); ctx.lineTo(bgX, bgBot); ctx.stroke();
     ctx.setLineDash([]);
@@ -588,7 +563,6 @@ function draw() {
     ctx.restore();
   }
 
-  // Energy axis — dynamic position, tick labels on axis with units
   if (showAx) {
     ctx.save();
     ctx.strokeStyle='#444'; ctx.fillStyle='#444'; ctx.lineWidth=1;
@@ -621,16 +595,51 @@ function draw() {
   ctx.fillStyle='#ccc'; ctx.font='8px "IBM Plex Mono",monospace';
   ctx.textAlign='right'; ctx.textBaseline='bottom';
 }
+
+function draw() {
+  const canvas = document.getElementById('diagram');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  drawToContext(ctx, W, H);
+  document.getElementById('badge-gap').textContent = `Eg: ${(parseFloat(document.getElementById('bandgap').value)||3.03).toFixed(2)} eV`;
+  document.getElementById('badge-traps').textContent = `${traps.length} trap state${traps.length!==1?'s':''}`;
+  document.getElementById('badge-paths').textContent = `${excitations.length} exc · ${emissions.length} em`;
+}
+
 function downloadPNG() {
-  draw();
   const src = document.getElementById('diagram');
   const hi = document.createElement('canvas');
   hi.width = src.width*3; hi.height = src.height*3;
-  const c2 = hi.getContext('2d'); c2.scale(3,3); c2.drawImage(src,0,0);
+  const c2 = hi.getContext('2d'); c2.scale(3,3);
+  drawToContext(c2, src.width, src.height);
   const a = document.createElement('a');
   a.download='energy_band_diagram_300dpi.png';
   a.href=hi.toDataURL('image/png'); a.click();
   showToast('PNG downloaded (300 dpi)');
+}
+
+function downloadPDF() {
+  const src = document.getElementById('diagram');
+  const W = src.width, H = src.height;
+  const SCALE = 6;
+  const hi = document.createElement('canvas');
+  hi.width = W * SCALE; hi.height = H * SCALE;
+  const c2 = hi.getContext('2d');
+  c2.scale(SCALE, SCALE);
+  drawToContext(c2, W, H);
+  const imgData = hi.toDataURL('image/png');
+  const { jsPDF } = window.jspdf;
+  const ptW = W * 72 / 100;
+  const ptH = H * 72 / 100;
+  const pdf = new jsPDF({
+    orientation: ptW > ptH ? 'landscape' : 'portrait',
+    unit: 'pt',
+    format: [ptW, ptH]
+  });
+  pdf.addImage(imgData, 'PNG', 0, 0, ptW, ptH, undefined, 'FAST');
+  pdf.setProperties({ title: 'Energy Band Diagram', creator: 'energy-band-diagram-builder v2' });
+  pdf.save('energy_band_diagram_600dpi.pdf');
+  showToast('PDF downloaded (600 dpi)');
 }
 
 function downloadSVG() {
@@ -647,7 +656,6 @@ function downloadSVG() {
   const vbLabel = document.getElementById('vb-label').value;
   const cbLabel = document.getElementById('cb-label').value;
 
-  // Match draw() layout exactly
   const AX_LABEL_W = showAx ? 22 : 0;
   const TICK_W     = showAx ? 44 : 0;
   let maxLabelW = 0;
@@ -665,6 +673,7 @@ function downloadSVG() {
   const PAD_L = 44, PAD_T = 46, PAD_B = 52;
   const PAD_R = maxLabelW + TICK_W + AX_LABEL_W + 10;
   const plotH = H - PAD_T - PAD_B, plotW = W - PAD_L - PAD_R;
+  const TH = 11;
 
   function yOf(e) { return PAD_T + plotH*(1-(e-minE)/eRange); }
   function getLvlE(id) {
@@ -680,11 +689,10 @@ function downloadSVG() {
   function dashArray(style) { return style==='dashed'?'5,4':style==='dotted'?'2,3':'none'; }
 
   const BX0=PAD_L, BX1=PAD_L+plotW*0.72, BW=BX1-BX0, BH=20;
-  const TX0=PAD_L+plotW*0.12, TX1=BX1, TW=TX1-TX0, TH=11;
+  const TX0=PAD_L+plotW*0.12, TX1=BX1, TW=TX1-TX0;
   const labelX = TX1 + 12;
   const axX = W - AX_LABEL_W - 10;
 
-  // Per-colour arrow markers
   const usedColors = new Set(['#1a1a1a']);
   excitations.forEach(e => usedColors.add(PATH_COLORS[e.colorIdx]));
   emissions.forEach(e => usedColors.add(PATH_COLORS[e.colorIdx]));
@@ -694,21 +702,16 @@ function downloadSVG() {
   }).join('');
 
   let s = '';
-
-  // VB: top edge at yOf(0), extends downward
   s += `<rect x="${BX0}" y="${yOf(0)}" width="${BW}" height="${BH}" rx="4" fill="#3a3a3a" stroke="#1a1a1a" stroke-width="1"/>`;
   s += `<text x="${BX0+BW/2}" y="${yOf(0)+BH/2+4}" text-anchor="middle" font-size="11" font-weight="bold" fill="white" font-family="sans-serif">${esc(vbLabel)}</text>`;
-  // CB: bottom edge at yOf(bandgap), extends upward
   s += `<rect x="${BX0}" y="${yOf(bandgap)-BH}" width="${BW}" height="${BH}" rx="4" fill="#3a3a3a" stroke="#1a1a1a" stroke-width="1"/>`;
   s += `<text x="${BX0+BW/2}" y="${yOf(bandgap)-BH/2+4}" text-anchor="middle" font-size="11" font-weight="bold" fill="white" font-family="sans-serif">${esc(cbLabel)}</text>`;
 
-  // Trap levels
   traps.forEach((t,i) => {
     const ty = yOf(t.energy);
     s += `<rect x="${TX0}" y="${ty-TH/2}" width="${TW}" height="${TH}" rx="3" fill="${t.color}" stroke="#333" stroke-width="0.7"/>`;
   });
 
-  // Trap labels with collision avoidance
   if (annot !== 'none') {
     const sortedByE = [...traps].map((t,i)=>({...t,i})).sort((a,b)=>b.energy-a.energy);
     const usedY = [];
@@ -733,7 +736,6 @@ function downloadSVG() {
     });
   }
 
-  // Excitation arrows
   const nExc=excitations.length, nEm=emissions.length;
   const excSp=TW/(nExc+1), emSp=TW/(nEm+1);
   excitations.forEach((e,i) => {
@@ -751,7 +753,6 @@ function downloadSVG() {
     }
   });
 
-  // Emission arrows
   emissions.forEach((e,i) => {
     const x = TX0+emSp*(i+1)+TW*0.08;
     const goingUp = getLvlE(e.toLevel) > getLvlE(e.fromLevel);
@@ -766,7 +767,6 @@ function downloadSVG() {
     }
   });
 
-  // Non-radiative relaxation
   if (showNR && traps.length > 1 && annot !== 'none') {
     const sorted = [...traps].sort((a,b)=>b.energy-a.energy);
     const nrX = TX0+TW*0.88;
@@ -781,7 +781,6 @@ function downloadSVG() {
     }
   }
 
-  // Bandgap bracket
   if (showBG && annot !== 'none') {
     const bgX=BX1+18, bgTop=yOf(bandgap), bgBot=yOf(0);
     s += `<line x1="${bgX}" y1="${bgTop}" x2="${bgX}" y2="${bgBot}" stroke="#bbb" stroke-width="0.8" stroke-dasharray="3,3"/>`;
@@ -792,7 +791,6 @@ function downloadSVG() {
     }
   }
 
-  // Energy axis
   if (showAx) {
     s += `<line x1="${axX}" y1="${H-PAD_B+10}" x2="${axX}" y2="${PAD_T-10}" stroke="#444" stroke-width="1" marker-end="url(#axarr)"/>`;
     s += `<text transform="translate(${axX+16},${H/2}) rotate(-90)" text-anchor="middle" font-size="11" fill="#444" font-family="sans-serif">Energy (eV)</text>`;
@@ -806,9 +804,7 @@ function downloadSVG() {
     });
   }
 
-  // Material label
   s += `<text x="${BX0}" y="${PAD_T-10}" font-size="10" font-weight="bold" fill="#777" font-family="sans-serif">${esc(material)}</text>`;
-  // Watermark
   s += `<text x="${W-4}" y="${H-4}" text-anchor="end" font-size="8" fill="#ccc" font-family="monospace">energy-band-diagram-builder v2</text>`;
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
@@ -827,6 +823,7 @@ ${s}
   a.href = URL.createObjectURL(blob); a.click();
   showToast('SVG downloaded');
 }
+
 function copyPython() {
   const bg=parseFloat(document.getElementById('bandgap').value)||3.03;
   const minE=parseFloat(document.getElementById('mine').value)||-0.3;
@@ -922,8 +919,8 @@ for e in [0,BANDGAP]+[t['energy'] for t in TRAPS]:
 ax.text(BX0,MAX_E-0.05,MATERIAL,fontsize=9,color='#777')
 plt.tight_layout()
 out=os.path.dirname(os.path.abspath(__file__))
-fig.savefig(os.path.join(out,'energy_band_diagram.pdf'),bbox_inches='tight',dpi=300)
-fig.savefig(os.path.join(out,'energy_band_diagram.png'),bbox_inches='tight',dpi=300)
+fig.savefig(os.path.join(out,'energy_band_diagram.pdf'),bbox_inches='tight',dpi=600)
+fig.savefig(os.path.join(out,'energy_band_diagram.png'),bbox_inches='tight',dpi=600)
 print('Saved.')
 `;
   navigator.clipboard.writeText(py).then(()=>showToast('Python script copied to clipboard'));
